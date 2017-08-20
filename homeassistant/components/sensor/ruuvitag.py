@@ -1,5 +1,6 @@
 import logging
 from datetime import timedelta
+from itertools import chain
 
 from homeassistant.const import TEMP_CELSIUS
 from homeassistant.util import Throttle
@@ -24,17 +25,27 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
         'temperature': TemperatureRuuviTagSensor,
         'humidity': HumidityRuuviTagSensor
     }
-    ruuvitags = RuuviTagSensor.get_data_for_sensors(search_duratio_sec=5)
-    sensors = []
-    for mac, data in ruuvitags.items():
-        identifier = data.pop('identifier')
-        try:
-            name = config['sensors'][mac]['name']
-        except ValueError:
-            name = identifier
-        for data_type, initial_state in data.items():
-            sensors.append(SENSOR_TYPES[data_type](mac, name))
-    add_devices(sensors)
+    sensors = {}
+
+    # Add configured sensors.
+    for name, sensor_config in config['sensors'].items():
+        mac = sensor_config['mac']
+        sensors[mac] = tuple((SENSOR_TYPES[t](mac, name)
+            for t in sensor_config.get('datas', SENSOR_TYPES.keys())))
+
+    # Auto discover ruuvitags.
+    if config.pop('discover', True):
+        ruuvitags = RuuviTagSensor.get_data_for_sensors(search_duratio_sec=5)
+        # Drop configured sensors from found ones
+        for mac in sensors:
+            ruuvitags.pop(mac)
+
+        # Name found tags with identifier. Add sensor for every data fields. 
+        for mac, data in ruuvitags.items():
+            identifier = data.pop('identifier', 'unknown')
+            sensors[mac] = tuple((SENSOR_TYPES[data_type](mac, identifier)
+                for t in data))
+    add_devices(list(chain(*sensors.values())))
 
 
 class BaseRuuviTagSensor(Entity):
