@@ -38,18 +38,21 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
         ruuvitags = RuuviTagSensor.get_data_for_sensors(search_duratio_sec=5)
         # Drop configured sensors from found ones
         for mac in sensors:
-            ruuvitags.pop(mac)
+            ruuvitags.pop(mac, None)
 
-        # Name found tags with identifier. Add sensor for every data fields. 
+        # Name found tags with identifier. Add sensor for every data fields.
         for mac, data in ruuvitags.items():
             identifier = data.pop('identifier', 'unknown')
-            sensors[mac] = tuple((SENSOR_TYPES[data_type](mac, identifier)
+            sensors[mac] = tuple((SENSOR_TYPES[t](mac, identifier)
                 for t in data))
-    add_devices(list(chain(*sensors.values())))
+
+    add_devices(list(chain(*sensors.values())), True)
+
 
 
 class BaseRuuviTagSensor(Entity):
     sensors = {}
+
     def __init__(self, mac, name):
         """Initialize the sensor."""
         self._mac = mac
